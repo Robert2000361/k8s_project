@@ -1,0 +1,39 @@
+# 1. ServiceAccount for API
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: banking-api-sa
+  namespace: banking
+---
+# 2. ServiceAccount for Dashboard
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: banking-dashboard-sa
+  namespace: banking
+---
+# 3. Role for Developers (Read-only access to pods)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: developer
+  namespace: banking
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+---
+# 4. RoleBinding mapping the Role to the user 'developer'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: developer-binding
+  namespace: banking
+subjects:
+- kind: User
+  name: developer
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: developer
+  apiGroup: rbac.authorization.k8s.io

@@ -1,0 +1,103 @@
+# 1. Headless Service (لربط القائد والتابع ببعضهما داخلياً)
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-svc
+  namespace: banking
+spec:
+  clusterIP: None
+  selector:
+    app: postgres-db
+  ports:
+  - port: 5432
+---
+# 2. StatefulSet (العضلة التي ستنفذ السكربتات)
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-db
+  namespace: banking
+spec:
+  serviceName: "postgres-svc"
+  replicas: 2 # 0 هو القائد، 1 هو التابع
+  selector:
+    matchLabels:
+      app: postgres-db
+  template:
+    metadata:
+      labels:
+        app: postgres-db
+    spec:
+      # --- إعدادات توجيه الـ Pods للنودز المخصصة وتحمل التحصين ---
+      # تم التعديل هنا ليطابق الـ Label الموجود على النود
+      nodeSelector:
+        type: high-memory 
+      
+      # تم التعديل هنا ليطابق الـ Taint الموجود على النود
+      tolerations:
+      - key: "database-only"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
+      # -------------------------------------------------------------
+      
+      # --- الحاوية التمهيدية (مخصصة للتابع فقط لنسخ البيانات) ---
+      initContainers:
+      - name: init-replica
+        image: postgres:16.1
+        command:
+        - /bin/bash
+        - -c
+        - |
+          # السكربت سيعمل فقط إذا كان اسم الـ Pod ينتهي بـ "-1" (يعني التابع)
+          if [[ $(hostname) == *"-1" ]]; then
+            echo "I am Slave! Executing setup script..."
+            /scripts/setup-slave.sh
+          else
+            echo "I am Master! Skipping init and booting normally..."
+          fi
+        env:
+        - name: POSTGRES_USER
+          valueFrom: { configMapKeyRef: { name: banking-config, key: DB_USER } }
+        - name: POSTGRES_PASSWORD
+          valueFrom: { secretKeyRef: { name: banking-secrets, key: DB_PASSWORD } }
+        volumeMounts:
+        - name: pgdata
+          mountPath: /var/lib/postgresql/data
+        - name: scripts
+          mountPath: /scripts
+
+      # --- الحاوية الأساسية لقاعدة البيانات ---
+      containers:
+      - name: postgres
+        image: postgres:16.1
+        env:
+        - name: POSTGRES_USER
+          valueFrom: { configMapKeyRef: { name: banking-config, key: DB_USER } }
+        - name: POSTGRES_PASSWORD
+          valueFrom: { secretKeyRef: { name: banking-secrets, key: DB_PASSWORD } }
+        - name: POSTGRES_DB
+          valueFrom: { configMapKeyRef: { name: banking-config, key: POSTGRES_DB } }
+        ports:
+        - containerPort: 5432
+        volumeMounts:
+        - name: pgdata
+          mountPath: /var/lib/postgresql/data
+        - name: scripts
+          mountPath: /docker-entrypoint-initdb.d/ 
+      
+      volumes:
+      - name: scripts
+        configMap:
+          name: pg-replication-scripts
+          defaultMode: 0755 # إعطاء صلاحية التشغيل (Execute) للسكربتات
+
+  # حجز مساحة التخزين (PVC)
+  volumeClaimTemplates:
+  - metadata:
+      name: pgdata
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi

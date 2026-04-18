@@ -1,0 +1,113 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-svc
+  namespace: banking
+  labels:
+    app: postgres-db
+spec:
+  ports:
+  - port: 5432
+    name: postgres
+  clusterIP: None
+  selector:
+    app: postgres-db
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-db
+  namespace: banking
+spec:
+  serviceName: "postgres-svc"
+  replicas: 2
+  selector:
+    matchLabels:
+      app: postgres-db
+  template:
+    metadata:
+      labels:
+        app: postgres-db
+    spec:
+      tolerations:
+      - key: "database-only"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: type
+                operator: In
+                values:
+                - high-memory
+
+      initContainers:
+      - name: fix-permissions
+        image: busybox:1.31
+        command: ['sh', '-c', 'chown -R 999:999 /var/lib/postgresql/data']
+        securityContext:
+          runAsUser: 0
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        securityContext:
+          runAsUser: 999
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_DB
+          value: "banking_db"
+        - name: POSTGRES_USER
+          value: "bankuser"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: banking-secrets
+              key: DB_PASSWORD
+        
+        startupProbe:
+          exec:
+            command: ["pg_isready", "-U", "bankuser"]
+          failureThreshold: 20
+          periodSeconds: 5
+        readinessProbe:
+          exec:
+            command: ["pg_isready", "-U", "bankuser"]
+          periodSeconds: 10
+        livenessProbe:
+          exec:
+            command: ["pg_isready", "-U", "bankuser"]
+          periodSeconds: 30
+
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+        # الربط السحري للسكريبتات من الـ ConfigMap
+        - name: pg-scripts
+          mountPath: /docker-entrypoint-initdb.d/setup-master.sh
+          subPath: setup-master.sh
+        - name: pg-scripts
+          mountPath: /docker-entrypoint-initdb.d/setup-slave.sh
+          subPath: setup-slave.sh
+
+      volumes:
+      - name: pg-scripts
+        configMap:
+          name: pg-replication-scripts
+          defaultMode: 0755
+          
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 5Gi

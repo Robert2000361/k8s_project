@@ -1,0 +1,150 @@
+# 1. Default Deny All (Block everything in the namespace)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-all
+  namespace: banking
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+---
+# 2. Allow DNS Egress (Crucial for pods to find each other by name)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: banking
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+  egress:
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+---
+# 3. Allow Ingress to Dashboard (from Ingress Controller)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: dashboard-allow-ingress
+  namespace: banking
+spec:
+  podSelector:
+    matchLabels:
+      app: banking-dashboard
+  policyTypes:
+  - Ingress
+  ingress:
+  - ports:
+    - port: 80
+---
+# 4. Allow Dashboard to API Egress
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: dashboard-allow-egress-to-api
+  namespace: banking
+spec:
+  podSelector:
+    matchLabels:
+      app: banking-dashboard
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: banking-api
+    ports:
+    - port: 3000
+---
+# 5. Allow Ingress to API (from Dashboard and Ingress Controller)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-allow-ingress
+  namespace: banking
+spec:
+  podSelector:
+    matchLabels:
+      app: banking-api
+  policyTypes:
+  - Ingress
+  ingress:
+  - ports:
+    - port: 3000
+---
+# 6. Allow API to Postgres Egress (تم التعديل هنا)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-allow-egress-to-db
+  namespace: banking
+spec:
+  podSelector:
+    matchLabels:
+      app: banking-api
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: postgres-db # التعديل: إضافة -db
+    ports:
+    - port: 5432
+---
+# 7. Allow Postgres Ingress (ONLY from API) (تم التعديل هنا)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-allow-ingress-from-api
+  namespace: banking
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres-db # التعديل: إضافة -db
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: banking-api
+    ports:
+    - port: 5432
+---
+# 8. Allow Postgres Internal Replication (Master <-> Slave) (الإضافة الجديدة)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-internal-replication
+  namespace: banking
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres-db
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: postgres-db
+    ports:
+    - protocol: TCP
+      port: 5432
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: postgres-db
+    ports:
+    - protocol: TCP
+      port: 5432

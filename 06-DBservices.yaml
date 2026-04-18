@@ -1,0 +1,27 @@
+# 1. خدمة الماستر (للكتابة والقراءة)
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-master
+  namespace: banking
+spec:
+  selector:
+    statefulset.kubernetes.io/pod-name: postgres-db-0
+  ports:
+    - port: 5432
+      targetPort: 5432
+
+---
+
+# 2. خدمة الـ Replica (للقراءة فقط - تخفيف الحمل)
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-replica
+  namespace: banking
+spec:
+  selector:
+    statefulset.kubernetes.io/pod-name: postgres-db-1
+  ports:
+    - port: 5432
+      targetPort: 5432

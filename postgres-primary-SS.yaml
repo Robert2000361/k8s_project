@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-primary
+  namespace: banking
+spec:
+  serviceName: "postgres-svc-primary"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres-db
+      role: primary
+  template:
+    metadata:
+      labels:
+        app: postgres-db
+        role: primary
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15
+        env:
+        - name: POSTGRES_DB
+          value: "banking_db"
+        - name: POSTGRES_USER
+          value: "bankuser"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-credentials
+              key: postgres-password
+        - name: REPLICATION_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-credentials
+              key: replication-password
+        # ⚠️ الحل السحري لتجاهل أي داتا قديمة: فولدر جديد تماماً ⚠️
+        - name: PGDATA
+          value: "/var/lib/postgresql/data/fresh-db-v1"
+        ports:
+        - containerPort: 5432
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+        - name: config-volume
+          mountPath: /etc/postgresql/custom
+        - name: init-script-volume
+          mountPath: /docker-entrypoint-initdb.d
+        args:
+          - "-c"
+          - "config_file=/etc/postgresql/custom/postgresql.conf"
+          - "-c"
+          - "hba_file=/etc/postgresql/custom/pg_hba.conf"
+      volumes:
+      - name: config-volume
+        configMap:
+          name: postgres-config
+      - name: init-script-volume
+        configMap:
+          name: postgres-init-script
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi

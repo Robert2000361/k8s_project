@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: banking # All Project's files depend on that ns
+  labels:
+    env: production
+    team: finance

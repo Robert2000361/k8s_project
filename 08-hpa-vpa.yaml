@@ -1,0 +1,35 @@
+# 1. Horizontal Pod Autoscaler (HPA) for Banking API
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: banking-api-hpa
+  namespace: banking
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: banking-api
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 60
+---
+# 2. Vertical Pod Autoscaler (VPA) for PostgreSQL
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: postgres-db-vpa
+  namespace: banking
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: postgres-db
+  updatePolicy:
+    # "Off" means it will only provide recommendations, it won't restart pods automatically
+    updateMode: "Off"

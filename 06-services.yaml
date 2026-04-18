@@ -1,0 +1,29 @@
+# Service for Banking API - Internal communication only
+apiVersion: v1
+kind: Service
+metadata:
+  name: banking-api-service
+  namespace: banking
+spec:
+  type: ClusterIP
+  selector:
+    app: banking-api      # Must match labels in 04-api-deployment.yaml
+  ports:
+    - protocol: TCP
+      port: 3000          # Port accessible by other pods
+      targetPort: 3000    # Port the API is running on inside the pod
+---
+# Service for Banking Dashboard - Internal communication only
+apiVersion: v1
+kind: Service
+metadata:
+  name: banking-dashboard-service
+  namespace: banking
+spec:
+  type: ClusterIP
+  selector:
+    app: banking-dashboard # Must match labels in 05-dashboard-deployment.yaml
+  ports:
+    - protocol: TCP
+      port: 80             # Port accessible by other pods
+      targetPort: 80       # Port Nginx is running on inside the pod

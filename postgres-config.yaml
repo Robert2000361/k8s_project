@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-config
+  namespace: banking
+data:
+  postgresql.conf: |
+    listen_addresses = '*'
+  pg_hba.conf: |
+    # السماح بالاتصال من أي مكان باستخدام الباسوورد المشفرة
+    host    all             all             0.0.0.0/0               md5
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-script
+  namespace: banking
+data:
+  init.sql: |
+    -- الداتا بيز بتنشئ الـ User والـ DB تلقائياً من الـ Environment Variables
+    -- السكريبت ده إضافي لو حابب تدي صلاحيات أو تنشئ جداول مبدئية
+    GRANT ALL PRIVILEGES ON DATABASE banking_db TO bankuser;

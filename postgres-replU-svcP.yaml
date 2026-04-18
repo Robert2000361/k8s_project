@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-script
+  namespace: banking
+data:
+  init-repl-user.sh: |
+    #!/bin/bash
+    set -e
+    psql -v ON_ERROR_STOP=1 --username "\$POSTGRES_USER" --dbname "\$POSTGRES_DB" <<-EOSQL
+        CREATE ROLE repl_user WITH REPLICATION LOGIN PASSWORD '\$REPLICATION_PASSWORD';
+    EOSQL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-svc-primary
+  namespace: banking
+  labels:
+    app: postgres-db
+spec:
+  ports:
+  - port: 5432
+    targetPort: 5432
+  selector:
+    app: postgres-db
+    role: primary

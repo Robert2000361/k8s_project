@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: banking-api
+  namespace: banking
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: banking-api
+  template:
+    metadata:
+      labels:
+        app: banking-api
+    spec:
+      # Init Container: Pauses API startup until Database is ready on port 5432
+      initContainers:
+      - name: wait-for-db
+        image: busybox:1.31
+        # command: ['sh', '-c', 'until nc -z postgres-db 5432; do echo "Waiting for Database..."; sleep 2; done;']
+        # command: ['sh', '-c', 'until nc -z postgres-db-0.postgres-svc 5432; do echo "Waiting for Master Database..."; sleep 2; done;']
+        command: ['sh', '-c', 'until nc -z postgres-svc 5432; do echo "Waiting for Database..."; sleep 2; done;']
+      # Main API Container
+      containers:
+      - name: banking-api
+        # IMPORTANT: Replace r0bert000 with your actual Docker Hub username later
+        image: r0bert000/banking-api:v1.0
+
+        securityContext:
+          runAsUser: 1000
+          runAsNonRoot: true
+          readOnlyRootFilesystem: true
+        # ------------------------
+        ports:
+        - containerPort: 3000
+        
+        # Load environment variables from ConfigMap and Secret
+        envFrom:
+        - configMapRef:
+            name: banking-config
+        - secretRef:
+            name: banking-secrets
+            
+        # Resource requests required for HPA (Phase 3)
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+            
+        # Phase 1 Health Probes
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          failureThreshold: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 15
+          periodSeconds: 20

@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pg-replication-scripts
+  namespace: banking
+data:
+  # 1. سكربت القائد (Master): ينشئ مستخدم المزامنة ويسمح له بالاتصال
+  setup-master.sh: |
+    #!/bin/bash
+    echo "=== I am the Master! Setting up Replication ==="
+    # إنشاء مستخدم خاص بالـ WAL (replicator)
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+      CREATE ROLE replicator WITH REPLICATION PASSWORD 'replica_pass' LOGIN;
+    EOSQL
+    
+    # تعديل جدار الحماية الخاص بـ Postgres ليسمح للـ Slave بسحب البيانات
+    echo "host replication replicator all md5" >> /var/lib/postgresql/data/pg_hba.conf
+    echo "Master Setup Complete!"
+
+  # 2. سكربت التابع (Slave): ينتظر القائد، يمسح بياناته، ويسحب الـ WAL
+  setup-slave.sh: |
+    #!/bin/bash
+    echo "=== I am the Slave! Waiting for Master ==="
+    # انتظار حتى يعمل الـ Master تماماً
+    until PGPASSWORD=$POSTGRES_PASSWORD pg_isready -h postgres-db-0.postgres-svc.banking.svc.cluster.local -U $POSTGRES_USER; do
+      echo "Waiting for Master to be ready..."
+      sleep 2
+    done
+    
+    # سحب نسخة الـ WAL باستخدام الأداة السحرية pg_basebackup
+    echo "Master is ready! Starting pg_basebackup..."
+    export PGPASSWORD=replica_pass
+    
+    # تفريغ المجلد من أي ملفات قديمة
+    rm -rf /var/lib/postgresql/data/*
+    
+    # سحب النسخة من القائد (-R لإنشاء ملف standby.signal ليصبح تابعاً)
+    pg_basebackup -h postgres-db-0.postgres-svc.banking.svc.cluster.local -U replicator -D /var/lib/postgresql/data -Fp -Xs -R
+    
+    echo "Backup Complete! Starting as Replica..."

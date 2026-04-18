@@ -1,0 +1,22 @@
+# Kubernetes & IDE specific
+.kube/
+.minikube/
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local env files (Secrets should never be pushed)
+.env
+*.env
+.env.*
+*.secret
+secrets.yaml
+
+# Logs
+*.log
+logs/
+
+# OS generated files
+.DS_Store
+Thumbs.db
